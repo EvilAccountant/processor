@@ -1,0 +1,9 @@
+function [ newsignal ] = doFilter (fp,fst,ap,ast,fs,arrData)
+%Fpass Fstop Apass Astop Fs
+d=fdesign.lowpass(fp,fst,ap,ast,fs);
+signal=arrData;
+%设计低通滤波器
+h = design(d);
+%对信号进行低通滤波并画出波形
+newsignal=filter(h,signal);
+end
