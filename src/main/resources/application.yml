@@ -14,8 +14,8 @@ canIds: "0x0581,0x0582,0x0583,0x0584,0x0585,0x0586,0x0587"
 canDistance: "0,20,40,60,80,100,120"
 canNumber: 7
 
-fPass: 0.5 #通带截止频率
+fPass: 1 #通带截止频率
 fStop: 2 #阻带截止频率
 aPass: 1 #通带最大衰减
 aStop: 40 #阻带最小衰减
-fSample: 50 #采样频率
+fSample: 20 #采样频率

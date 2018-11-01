@@ -18,7 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.*;
-import java.lang.reflect.Field;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -48,6 +49,8 @@ public class OffsetService {
     private BsonTimestamp collectTime = null;//采集时间
 
     private final DateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private long time = System.currentTimeMillis();
 
     @Value("${canIds}")
     String canIds;//倾角仪ID字符串
@@ -66,16 +69,17 @@ public class OffsetService {
      *
      * @return
      */
-    @Scheduled(initialDelay = 48 * 60 * 1000, fixedRate = 48 * 60 * 1000)
+    @Scheduled(fixedDelay = 60 * 1000)
     public void getOriData() {
+        System.out.println(sdf.format(time));
         File folder = new File(folderPath);
         File file = null;
-        LinkedHashMap<String, String> offsetMap = new LinkedHashMap<>(canNumber);
-        StringBuilder date = new StringBuilder(47);//当日年月日
-        date.append(MyUtils.getToday());
+        RandomAccessFile raf = null;
+        FileChannel channel = null;
+        FileLock fileLock = null;
 
-        int index = 0;
         try {
+
             File[] fileList = folder.listFiles();
             for (int i = 0; i < fileList.length; i++) {
                 if (fileList[i].length() == 0) {
@@ -87,53 +91,24 @@ public class OffsetService {
                     break;
                 }
             }
+
             if (file != null) {
-                if (isCsv(file.getName())) {
-                    Iterable<CSVRecord> records;
-                    try (Reader in = new InputStreamReader(new FileInputStream(file), "GBK")) {
-                        records = CSVFormat.EXCEL
-                                .withHeader("序号", "系统时间", "时间标识", "CAN通道", "传输方向", "ID号", "帧类型", "帧格式", "长度", "数据")
-                                .parse(in)
-                                .getRecords();
-                    }
-                    for (CSVRecord record : records) {
-                        if (index == 0) {
-                            index++;
-                            continue;
-                        }
-
-                        index++;
-                        String time = record.get("系统时间").substring(2, 14);
-                        String canId = record.get("ID号");
-                        String data = record.get("数据").substring(3, 26).replace(" ", "");
-
-                        //获取x个传感器数据
-                        if (!offsetMap.containsKey(canId)) {
-                            offsetMap.put(canId, date.append(time).append("@").append(canId).append("@").append(data).toString());
-                            date.delete(0, date.length());
-                            date.append(MyUtils.getToday());
-                        }
-                        //检验数据是否为x个
-                        if (offsetMap.size() == canNumber) {
-                            //检验数据首尾差值是否在20ms以内
-                            if (getJetLag(offsetMap)) {
-//                                file.delete();
-                                onReceive(offsetMap);
-                                LOGGER.info("已获取一组数据");
-                                offsetMap.clear();
-                            } else if (!records.iterator().hasNext()) {
-                                break;
-                            } else {
-                                offsetMap.clear();
-                                continue;
-                            }
-                        }
-                    }
-                    LOGGER.info("总共收集" + index + "条数据");
-                    clearFile(file);
-                } else {
-                    System.out.println("此文件不是CSV文件！");
+                Iterable<CSVRecord> records;
+                try (Reader in = new InputStreamReader(new FileInputStream(file), "GBK")) {
+                    records = CSVFormat.EXCEL
+                            .withHeader("序号", "系统时间", "时间标识", "CAN通道", "传输方向", "ID号", "帧类型", "帧格式", "长度", "数据")
+                            .parse(in)
+                            .getRecords();
                 }
+                raf = new RandomAccessFile(file, "rw");
+                channel = raf.getChannel();
+                fileLock = channel.tryLock();
+
+                analysisRecord(records);
+
+                clearFile(file);
+                fileLock.release();
+                raf.close();
             }
         } catch (Exception e) {
             LOGGER.error(e);
@@ -141,21 +116,98 @@ public class OffsetService {
     }
 
     /**
+     * 获取数据
+     *
+     * @param records
+     */
+    public void analysisRecord(Iterable<CSVRecord> records) {
+        StringBuilder date = new StringBuilder(47);//当日年月日
+        date.append(MyUtils.getToday());
+
+        LinkedHashMap<String, ArrayList<String>> timeMap = new LinkedHashMap<>();
+        String time, canId, data;
+        int index = 0;
+
+        for (CSVRecord record : records) {
+            if (index == 0) {
+                index++;
+                continue;
+            }
+            index++;
+            time = record.get("系统时间").substring(2, 14);
+            canId = record.get("ID号");
+            data = record.get("数据").substring(3, 26).replace(" ", "");
+
+            String actualTime = (date.toString() + time).substring(0, 18);
+            if (!timeMap.containsKey(actualTime)) {
+                timeMap.put(actualTime, new ArrayList<>());
+            }
+            //获取x个传感器数据
+            timeMap.get(actualTime).add(date.append(time).append("@").append(canId).append("@").append(data).toString());
+            date.delete(0, date.length());
+            date.append(MyUtils.getToday());
+        }
+        buildSecMap(timeMap);//组装处理数据
+        LOGGER.info("总共收集" + index + "条数据");
+    }
+
+    private void buildSecMap(LinkedHashMap<String, ArrayList<String>> timeMap) {
+        String canId = "";
+        ArrayList<String> tempList;
+
+        for (String key : timeMap.keySet()) {
+            tempList = timeMap.get(key);
+            LinkedHashMap<String, ArrayList<String>> secMap = new LinkedHashMap<>();
+
+            for (int i = 0; i < tempList.size(); i++) {
+                canId = tempList.get(i).split("@")[1];
+                if (!secMap.containsKey(canId)) {
+                    secMap.put(canId, new ArrayList<>());
+                }
+                secMap.get(canId).add(tempList.get(i));
+            }
+            buildDataTeam(secMap);
+            secMap.clear();
+        }
+    }
+
+    private void buildDataTeam(LinkedHashMap<String, ArrayList<String>> secMap) {
+        List<String> tempList = new ArrayList<>(canNumber);
+        int length = 999;
+        //获取最小长度
+        for (String key : secMap.keySet()) {
+            if (secMap.get(key).size() < length) {
+                length = secMap.get(key).size();
+            }
+        }
+        //组装为一组数据
+        for (int i = 0; i < length; i++) {
+            for (String key : secMap.keySet()) {
+                tempList.add(secMap.get(key).get(i));
+            }
+            if (tempList.size() == canNumber) {
+                onReceive(tempList);
+                tempList.clear();
+            }
+        }
+    }
+
+
+    /**
      * 接收到倾角仪数据
      */
     @Transactional
-    public void onReceive(LinkedHashMap<String, String> offsetMap) throws ParseException {
+    public void onReceive(List<String> dataList) {
         collectTime = new BsonTimestamp(new Date().getTime());//设置时间
-        List<String> dataList = new ArrayList<>(canNumber);
-
-        for (Map.Entry<String, String> entry : offsetMap.entrySet()) {
-            dataList.add(entry.getValue());
-        }
-
         if (dataList != null && dataList.size() == canNumber) {
             dataList.forEach(item -> System.out.println(item));
-            List<TblOriginOffset> originOffsetList = toOriOffset(dataList, collectTime);
-            if (!originOffsetList.isEmpty()) tblOriginOffsetRepository.insert(originOffsetList);
+            System.out.println("===============================================");
+            try {
+                List<TblOriginOffset> originOffsetList = toOriOffset(dataList, collectTime);
+                if (!originOffsetList.isEmpty()) tblOriginOffsetRepository.insert(originOffsetList);
+            } catch (ParseException e) {
+                LOGGER.error(e);
+            }
         }
     }
 
@@ -164,9 +216,9 @@ public class OffsetService {
     public void doFilter() {
         LOGGER.info("滤波仪式 启动！");
         List<TblMeasurePointOffset> measurePointList = getMeasurePoints();
-        Long time = System.currentTimeMillis() - 48 * 60 * 1000;
-        String headTime = sdf.format(time - 2 * 60 * 1000 - 1);//2min
-        String endTime = sdf.format(time + 1);
+        long ctime = time;
+        String headTime = sdf.format(ctime - 2 * 60 * 1000 - 1);//2min
+        String endTime = sdf.format(ctime + 1);
 
         List<TblOriginOffset> originOffsetList = tblOriginOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
         LOGGER.info("参加滤波仪式的英灵有" + originOffsetList.size() + "位");
@@ -176,8 +228,8 @@ public class OffsetService {
         tblFilteredOffsetRepository.insert(filteredList);
         LOGGER.info("滤波仪式 完成！");
 
-        headTime = sdf.format(time - 1.5 * 60 * 1000 - 1);//30s
-        endTime = sdf.format(time - 0.5 * 60 * 1000 + 1);//1min30s
+        headTime = sdf.format(ctime - 1.5 * 60 * 1000 - 1);//30s
+        endTime = sdf.format(ctime - 0.5 * 60 * 1000 + 1);//1min30s
         filteredList = tblFilteredOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
         HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
         List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
@@ -222,6 +274,7 @@ public class OffsetService {
             storeOffsetList.get(i).setMeasurePoint(String.format("WY-%02d-Q-01", i + 1));
             storeOffsetList.get(i).setAcTime(acTime);
             storeOffsetList.get(i).setAcTimeValue(sdf.format(acTime.getValue()));
+            storeOffsetList.get(i).setMinZone(sdfm.format(acTime.getValue()));
         }
         //保存计算结果
         tblDataOffsetRepository.insert(storeOffsetList);
@@ -293,36 +346,44 @@ public class OffsetService {
         return fileName.matches("^.+\\.(?i)(csv)$");
     }
 
-    public <K, V> Map.Entry<K, V> getHead(LinkedHashMap<K, V> map) {
-        return map.entrySet().iterator().next();
-    }
+//    public <K, V> Map.Entry<K, V> getHead(LinkedHashMap<K, V> map) {
+//        return map.entrySet().iterator().next();
+//    }
+//
+//    public <K, V> Map.Entry<K, V> getTailByReflection(LinkedHashMap<K, V> map)
+//            throws NoSuchFieldException, IllegalAccessException {
+//        Field tail = map.getClass().getDeclaredField("tail");
+//        tail.setAccessible(true);
+//        return (Map.Entry<K, V>) tail.get(map);
+//    }
 
-    public <K, V> Map.Entry<K, V> getTailByReflection(LinkedHashMap<K, V> map)
-            throws NoSuchFieldException, IllegalAccessException {
-        Field tail = map.getClass().getDeclaredField("tail");
-        tail.setAccessible(true);
-        return (Map.Entry<K, V>) tail.get(map);
-    }
-
-    /**
-     * 判断数据是否在20ms以内
-     *
-     * @param map
-     * @return
-     */
-    private boolean getJetLag(LinkedHashMap<String, String> map) throws ParseException, NoSuchFieldException, IllegalAccessException {
-        boolean isUseful = false;
-        long headTime = sdf.parse(getHead(map).getValue().split("@")[0]).getTime();
-        long tailTime = sdf.parse(getTailByReflection(map).getValue().split("@")[0]).getTime();
-        if (tailTime - headTime <= 20) {
-            isUseful = true;
-        }
-        return isUseful;
-    }
+//    /**
+//     * 判断数据是否在20ms以内
+//     *
+//     * @param map
+//     * @return
+//     */
+//    private boolean getJetLag(LinkedHashMap<String, String> map) throws ParseException, NoSuchFieldException, IllegalAccessException {
+//        boolean isUseful = false;
+//        long headTime = sdf.parse(getHead(map).getValue().split("@")[0]).getTime();
+//        long tailTime = sdf.parse(getTailByReflection(map).getValue().split("@")[0]).getTime();
+//        if (tailTime - headTime <= 20) {
+//            isUseful = true;
+//        }
+//        return isUseful;
+//    }
 
     public void clearFile(File file) throws FileNotFoundException {
         PrintWriter pw = new PrintWriter(file);
         pw.close();
+    }
+
+    private LinkedHashMap<String, String> idMapGen() {
+        LinkedHashMap<String, String> canMap = new LinkedHashMap<>(canNumber);
+        for (int i = 1; i <= canNumber; i++) {
+            canMap.put("0x058" + i, null);
+        }
+        return canMap;
     }
 
 

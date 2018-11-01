@@ -21,6 +21,10 @@ public final class TblDataOffset {
 
     private Date sendTime;
 
+    private String minZone;
+
+    private String uploaded;
+
 
     public String getId() {
         return id;
@@ -76,5 +80,21 @@ public final class TblDataOffset {
 
     public void setAcTimeValue(String acTimeValue) {
         this.acTimeValue = acTimeValue;
+    }
+
+    public String getMinZone() {
+        return minZone;
+    }
+
+    public void setMinZone(String minZone) {
+        this.minZone = minZone;
+    }
+
+    public String getUploaded() {
+        return uploaded;
+    }
+
+    public void setUploaded(String uploaded) {
+        this.uploaded = uploaded;
     }
 }
