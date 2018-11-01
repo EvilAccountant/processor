@@ -14,11 +14,7 @@ public final class TblOriginOffset {
 
     private BsonTimestamp dataTime;
 
-    private BsonTimestamp collectTime;
-
     private String dataTimeValue;
-
-    private String collectTimeValue;
 
     public String getCanId() {
         return canId;
@@ -60,14 +56,6 @@ public final class TblOriginOffset {
         this.dataTime = dataTime;
     }
 
-    public BsonTimestamp getCollectTime() {
-        return collectTime;
-    }
-
-    public void setCollectTime(BsonTimestamp collectTime) {
-        this.collectTime = collectTime;
-    }
-
     public String getDataTimeValue() {
         return dataTimeValue;
     }
@@ -76,19 +64,10 @@ public final class TblOriginOffset {
         this.dataTimeValue = dataTimeValue;
     }
 
-    public String getCollectTimeValue() {
-        return collectTimeValue;
-    }
-
-    public void setCollectTimeValue(String collectTimeValue) {
-        this.collectTimeValue = collectTimeValue;
-    }
-
     @Override
     public String toString() {
         return " canId : " + canId + "\n" +
                 " dataTimeValue : " + dataTimeValue + "\n" +
-                " collectTimeValue : " + collectTimeValue + "\n" +
                 " valueX : " + valueX + " valueY : " + valueY + "\n" +
                 " data : " + data + "\n";
     }

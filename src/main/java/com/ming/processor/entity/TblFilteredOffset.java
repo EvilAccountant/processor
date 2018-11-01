@@ -12,11 +12,7 @@ public final class TblFilteredOffset {
 
     private BsonTimestamp dataTime;
 
-    private BsonTimestamp collectTime;
-
     private String dataTimeValue;
-
-    private String collectTimeValue;
 
     private double oriValueX;
 
@@ -58,28 +54,12 @@ public final class TblFilteredOffset {
         this.dataTime = dataTime;
     }
 
-    public BsonTimestamp getCollectTime() {
-        return collectTime;
-    }
-
-    public void setCollectTime(BsonTimestamp collectTime) {
-        this.collectTime = collectTime;
-    }
-
     public String getDataTimeValue() {
         return dataTimeValue;
     }
 
     public void setDataTimeValue(String dataTimeValue) {
         this.dataTimeValue = dataTimeValue;
-    }
-
-    public String getCollectTimeValue() {
-        return collectTimeValue;
-    }
-
-    public void setCollectTimeValue(String collectTimeValue) {
-        this.collectTimeValue = collectTimeValue;
     }
 
     public double getOriValueX() {

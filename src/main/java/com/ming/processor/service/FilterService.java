@@ -72,8 +72,6 @@ public class FilterService {
             TblFilteredOffset filteredOffset = new TblFilteredOffset();
 
             filteredOffset.setCanId(tempId);
-            filteredOffset.setCollectTime(originOffset.getCollectTime());
-            filteredOffset.setCollectTimeValue(originOffset.getCollectTimeValue());
             filteredOffset.setDataTime(originOffset.getDataTime());
             filteredOffset.setDataTimeValue(originOffset.getDataTimeValue());
             filteredOffset.setOriData(originOffset.getData());

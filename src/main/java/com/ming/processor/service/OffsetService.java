@@ -320,8 +320,6 @@ public class OffsetService {
             offset.setValueY(MyUtils.decimalParse(yStr));
             offset.setDataTime(new BsonTimestamp(sdf.parse(time).getTime()));
             offset.setDataTimeValue(time);
-            offset.setCollectTime(collectionTime);
-            offset.setCollectTimeValue(sdf.format(collectionTime.getValue()));
             originOffsetList.add(offset);
         }
         return originOffsetList;
