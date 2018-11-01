@@ -11,4 +11,7 @@ public interface TblOriginOffsetRepository extends MongoRepository<TblOriginOffs
     @Query("{'collectTimeValue' : {'$gte' : ?0, '$lte' : ?1 }}")
     List<TblOriginOffset> findByCollectTimeValueBetweenOrderByCollectTimeValue(String headTime, String endTime);
 
+    @Query("{'dataTimeValue' : {'$gte' : ?0, '$lte' : ?1 }}")
+    List<TblOriginOffset> findByDataTimeValueBetweenOrderByDataTimeValue(String headTime, String endTime);
+
 }

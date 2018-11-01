@@ -11,4 +11,7 @@ public interface TblFilteredOffsetRepository extends MongoRepository<TblFiltered
     @Query("{'collectTimeValue' : {'$gte' : ?0, '$lte' : ?1 }}")
     List<TblFilteredOffset> findByCollectTimeValueBetweenOrderByCollectTimeValue(String headTime, String endTime);
 
+    @Query("{'dataTimeValue' : {'$gte' : ?0, '$lte' : ?1 }}")
+    List<TblFilteredOffset> findByDataTimeValueBetweenOrderByDataTimeValue(String headTime, String endTime);
+
 }
