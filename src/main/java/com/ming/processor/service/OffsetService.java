@@ -71,7 +71,7 @@ public class OffsetService {
      */
     @Scheduled(fixedDelay = 60 * 1000)
     public void getOriData() {
-        System.out.println(sdf.format(time));
+        time = time + 60 * 1000;
         File folder = new File(folderPath);
         File file = null;
         RandomAccessFile raf = null;
@@ -152,7 +152,7 @@ public class OffsetService {
     }
 
     private void buildSecMap(LinkedHashMap<String, ArrayList<String>> timeMap) {
-        String canId = "";
+        String canId;
         ArrayList<String> tempList;
 
         for (String key : timeMap.keySet()) {
