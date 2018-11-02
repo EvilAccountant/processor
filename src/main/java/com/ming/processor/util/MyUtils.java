@@ -2,6 +2,7 @@ package com.ming.processor.util;
 
 import java.util.Calendar;
 import java.util.Date;
+import java.util.UUID;
 
 public final class MyUtils {
 
@@ -26,22 +27,6 @@ public final class MyUtils {
         return yearStr + "-" + monthStr + "-" + dayStr + " ";
     }
 
-//    /**
-//     * 解析数据至十进制
-//     *
-//     * @return
-//     */
-//    public static double decimalFormate(String originData) {
-//        String symbol = originData.substring(0, 1);//符号位
-//        int beforeDp = Integer.valueOf(originData.substring(1, 4));//整数位
-//        double afterDp = Double.valueOf("0." + originData.substring(4));//小数位
-//        if (symbol.equals("1")) {
-//            return -(beforeDp + afterDp);
-//        } else {
-//            return beforeDp + afterDp;
-//        }
-//    }
-
     /**
      * 解析数据至十进制
      */
@@ -51,6 +36,22 @@ public final class MyUtils {
         double value = Double.valueOf(oriString.substring(1, 4) + "." + oriString.substring(4, 8));
         if (symbol == 1) return -value;
         else return value;
+    }
+
+    /**
+     * 生成32位UUID
+     *
+     * @return
+     */
+    public static String generateUUID() {
+        return UUID.randomUUID().toString().replace("-", "").toUpperCase();
+    }
+
+    /**
+     * 转为弧度
+     */
+    public static double toRadian(double angle) {
+        return angle * Math.PI / 180D;
     }
 
 }
