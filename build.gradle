@@ -37,7 +37,6 @@ dependencies {
 
     compile group: 'org.mongodb', name: 'mongo-java-driver', version: '3.8.2'
     compile group: 'mysql', name: 'mysql-connector-java', version: '8.0.13'
-    compile group: 'ojdbc', name: 'ojdbc', version: '14'
     
     compile('org.springframework.boot:spring-boot-starter-data-mongodb')
     compile('org.springframework.boot:spring-boot-starter-web')
