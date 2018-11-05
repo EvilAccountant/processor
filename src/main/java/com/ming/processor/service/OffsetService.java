@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -62,6 +63,9 @@ public class OffsetService {
     private final DateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
     private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private long time = System.currentTimeMillis() - 12 * 1000;
+
+    @Value("${bridgeId}")
+    String bridgeId;//桥梁id
 
     @Value("${canIds}")
     String canIds;//倾角仪ID字符串
@@ -115,7 +119,9 @@ public class OffsetService {
                 channel = raf.getChannel();
                 fileLock = channel.tryLock();
 
-                analysisRecord(records);//获取数据
+                if (records != null && ((List<CSVRecord>) records).size() > 0) {
+                    analysisRecord(records);//获取数据
+                }
 
                 clearFile(file);
                 fileLock.release();
@@ -189,6 +195,7 @@ public class OffsetService {
 
     /**
      * 按顺序组装数据
+     *
      * @param secMap
      */
     private void buildDataTeam(LinkedHashMap<String, ArrayList<String>> secMap) {
@@ -238,32 +245,35 @@ public class OffsetService {
         String endTime = sdf.format(ctime + 1);
 
         List<TblOriginOffset> originOffsetList = tblOriginOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
-        LOGGER.info("滤波数据" + originOffsetList.size() + "条");
-        List<TblFilteredOffset> filteredList = new ArrayList<>();
 
-        filterService.throughFilter(originOffsetList, filteredList, canNumber);
-        tblFilteredOffsetRepository.insert(filteredList);
-        LOGGER.info("滤波完成");
+        if (originOffsetList.size() > 0) {
+            LOGGER.info("获取滤波数据" + originOffsetList.size() + "条");
+            List<TblFilteredOffset> filteredList = new ArrayList<>();
+            filterService.throughFilter(originOffsetList, filteredList, canNumber);
+            tblFilteredOffsetRepository.insert(filteredList);
+            LOGGER.info("滤波完成");
 
-        headTime = sdf.format(ctime - 1.5 * 60 * 1000 - 1);//30s
-        endTime = sdf.format(ctime - 0.5 * 60 * 1000 + 1);//1min30s
-        filteredList = tblFilteredOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
-        HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
-        List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
+            headTime = sdf.format(ctime - 1.5 * 60 * 1000 - 1);//30s
+            endTime = sdf.format(ctime - 0.5 * 60 * 1000 + 1);//1min30s
+            filteredList = tblFilteredOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
+            HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
+            List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
 
-        for (int i = 0; i < filteredList.size(); i++) {
-            filterTempList.add(filteredList.get(i));
-            if (filterTempList.size() == 7) {
-                //存放倾角值
-                filterTempList.forEach(item -> canIdRadianMap.put(item.getCanId(), parseCoordinateRadian(item.getValueX(), item.getValueY()).getY()));
-                if (canIdRadianMap.size() == measurePointList.size()) {
-                    addEightPointOffset(canIdRadianMap, measurePointList, filteredList.get(i).getDataTime(), "BlackStoneBridge");
+            for (int i = 0; i < filteredList.size(); i++) {
+                filterTempList.add(filteredList.get(i));
+                if (filterTempList.size() == 7) {
+                    //存放倾角值
+                    filterTempList.forEach(item -> canIdRadianMap.put(item.getCanId(), parseCoordinateRadian(item.getValueX(), item.getValueY()).getY()));
+                    if (canIdRadianMap.size() == measurePointList.size()) {
+                        addEightPointOffset(canIdRadianMap, measurePointList, filteredList.get(i).getDataTime(), bridgeId);
+                    }
+                    canIdRadianMap.clear();
+                    filterTempList.clear();
                 }
-                canIdRadianMap.clear();
-                filterTempList.clear();
             }
+            LOGGER.info("挠度数据计算完成！");
         }
-        LOGGER.info("挠度数据计算完成！");
+
     }
 
     /**
@@ -286,14 +296,16 @@ public class OffsetService {
         );
         AggregationResults<DataOffsetVo> output = mongoTemplate.aggregate(aggregation, "tblDataOffset", DataOffsetVo.class);
 
-        List<DataOffsetVo> voList = new ArrayList<>();
-        for (Iterator<DataOffsetVo> iterator = output.getMappedResults().iterator(); iterator.hasNext(); ) {
-            DataOffsetVo vo = iterator.next();
-            voList.add(vo);
-            System.out.println(vo.toString());
+        if (output.getMappedResults().size() > 0) {
+            List<DataOffsetVo> voList = new ArrayList<>();
+            for (Iterator<DataOffsetVo> iterator = output.getMappedResults().iterator(); iterator.hasNext(); ) {
+                DataOffsetVo vo = iterator.next();
+                voList.add(vo);
+                System.out.println(vo.toString());
+            }
+            dataOffsetVoService.insertAll(transtoOrcl(voList));
+            mongoTemplate.updateMulti(query, update, TblDataOffset.class);
         }
-        dataOffsetVoService.insertAll(voList);
-        mongoTemplate.updateMulti(query, update, TblDataOffset.class);
     }
 
     /**
@@ -373,6 +385,43 @@ public class OffsetService {
     }
 
     /**
+     * 转化为ORACLE数据库存储对象
+     *
+     * @param dataOffsetVoList
+     * @return
+     */
+    private List<TblDataOffsetToOrcl> transtoOrcl(List<DataOffsetVo> dataOffsetVoList) {
+        int size = dataOffsetVoList.size();
+        int tripleSize = size * 3;//最大 最小 平均
+        List<TblDataOffsetToOrcl> dataOffsetlList = new ArrayList<>(tripleSize);
+        DataOffsetVo dataOffsetVo;
+        try {
+            for (int i = 0; i < size; i++) {
+                dataOffsetVo = dataOffsetVoList.get(i);
+                for (int j = 0; j < 3; j++) {
+                    TblDataOffsetToOrcl dataOffset = new TblDataOffsetToOrcl();
+                    dataOffset.setId(MyUtils.generateUUID());
+                    dataOffset.setBridgeId(bridgeId);
+                    dataOffset.setMeasurePoint(dataOffsetVo.getMeasurePoint());
+                    if (j == 0) {
+                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getMinOffset()));
+                    }
+                    if (j == 1) {
+                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getMaxOffset()));
+                    }
+                    if (j == 2) {
+                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getAvgOffset()));
+                    }
+                    dataOffset.setAcTime(new Timestamp(sdfm.parse(dataOffsetVo.getMinZone()).getTime()));
+                }
+            }
+        } catch (ParseException e) {
+            LOGGER.error(e);
+        }
+        return dataOffsetlList;
+    }
+
+    /**
      * 解析倾角值
      */
     private CoordinateRadian parseCoordinateRadian(double x, double y) {
@@ -381,6 +430,7 @@ public class OffsetService {
 
     /**
      * 清空文件，以便作删除特征
+     *
      * @param file
      * @throws FileNotFoundException
      */

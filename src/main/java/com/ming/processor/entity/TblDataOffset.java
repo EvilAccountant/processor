@@ -25,7 +25,6 @@ public final class TblDataOffset {
 
     private String uploaded;
 
-
     public String getId() {
         return id;
     }

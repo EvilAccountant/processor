@@ -1,0 +1,7 @@
+64bit
+
+JDK:1.8
+MongoDB+MongoDBCompass: 存储收集信息 + 可视化工具
+vc_redist.x64: MongoDB win运行组件
+Matlab Compiler Runtime 9.4: 滤波函数运行环境
+7zip: 改配置信息

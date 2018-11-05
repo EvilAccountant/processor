@@ -4,14 +4,16 @@ spring:
       uri: mongodb://localhost:27017/processor
       username: admin
       password: admin
+
 server:
   port: 8888
 
-oracleUrl: "jdbc:mysql://localhost:3306/testDB?serverTimezone=UTC" #Oracle连接名
-oracleUsername: "root"  #用户名
-oraclePassword: "root"  #密码
+oracleUrl: "jdbc:oracle:thin:@localhost:1521:dqzx" #Oracle连接名
+oracleUsername: "dqzx"  #用户名
+oraclePassword: "dqzx"  #密码
 
 folderPath: "C:\\Users\\data" #文件夹路径
+bridgeId: "E875649989EA4AB39A3B10F110C98EC7" #桥梁ID
 
 #所有CAN设备的Id号以及位置数据，英文逗号分隔
 canIds: "0x0581,0x0582,0x0583,0x0584,0x0585,0x0586,0x0587"
