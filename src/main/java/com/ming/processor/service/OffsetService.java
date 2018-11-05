@@ -289,9 +289,9 @@ public class OffsetService {
         Aggregation aggregation = Aggregation.newAggregation(
                 Aggregation.match(Criteria.where("uploaded").is("0")),
                 Aggregation.group("minZone", "measurePoint")
-                        .min("offset").as("min")
-                        .max("offset").as("max")
-                        .avg("offset").as("avg"),
+                        .min("offset").as("minOffset")
+                        .max("offset").as("maxOffset")
+                        .avg("offset").as("avgOffset"),
                 Aggregation.sort(Sort.Direction.ASC, "minZone")
         );
         AggregationResults<DataOffsetVo> output = mongoTemplate.aggregate(aggregation, "tblDataOffset", DataOffsetVo.class);
@@ -306,6 +306,7 @@ public class OffsetService {
             dataOffsetVoService.insertAll(transtoOrcl(voList));
             mongoTemplate.updateMulti(query, update, TblDataOffset.class);
         }
+        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
     }
 
     /**

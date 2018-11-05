@@ -8,11 +8,11 @@ spring:
 server:
   port: 8888
 
-oracleUrl: "jdbc:oracle:thin:@localhost:1521:dqzx" #Oracle连接名
+oracleUrl: "jdbc:oracle:thin:@192.168.1.100:1521:dqzx" #Oracle连接名
 oracleUsername: "dqzx"  #用户名
 oraclePassword: "dqzx"  #密码
 
-folderPath: "C:\\Users\\data" #文件夹路径
+folderPath: "D:\\data" #文件夹路径
 bridgeId: "E875649989EA4AB39A3B10F110C98EC7" #桥梁ID
 
 #所有CAN设备的Id号以及位置数据，英文逗号分隔
