@@ -8,7 +8,8 @@ spring:
 server:
   port: 8888
 
-oracleUrl: "jdbc:oracle:thin:@192.168.1.100:1521:dqzx" #Oracle连接名
+
+oracleUrl: "jdbc:oracle:thin:@192.168.1.100:1521:orcl" #Oracle连接名
 oracleUsername: "dqzx"  #用户名
 oraclePassword: "dqzx"  #密码
 
@@ -16,9 +17,10 @@ folderPath: "D:\\data" #文件夹路径
 bridgeId: "E875649989EA4AB39A3B10F110C98EC7" #桥梁ID
 
 #所有CAN设备的Id号以及位置数据，英文逗号分隔
-canIds: "0x0581,0x0582,0x0583,0x0584,0x0585,0x0586,0x0587"
-canDistance: "0,20,40,60,80,100,120"
-canNumber: 7
+canIds: "0x0581,0x0582,0x0583,0x0584,0x0585,0x0586,0x0587" #canId
+canDistance: "0,20,40,60,80,100,120"  #测点距离
+canNumber: 7  #can数量
+#canTrigger: false #屏蔽052开关（临时）
 
 fPass: 1 #通带截止频率
 fStop: 2 #阻带截止频率

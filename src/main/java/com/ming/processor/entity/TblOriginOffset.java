@@ -14,8 +14,6 @@ public final class TblOriginOffset {
 
     private BsonTimestamp dataTime;
 
-    private String dataTimeValue;
-
     public String getCanId() {
         return canId;
     }
@@ -56,18 +54,9 @@ public final class TblOriginOffset {
         this.dataTime = dataTime;
     }
 
-    public String getDataTimeValue() {
-        return dataTimeValue;
-    }
-
-    public void setDataTimeValue(String dataTimeValue) {
-        this.dataTimeValue = dataTimeValue;
-    }
-
     @Override
     public String toString() {
         return " canId : " + canId + "\n" +
-                " dataTimeValue : " + dataTimeValue + "\n" +
                 " valueX : " + valueX + " valueY : " + valueY + "\n" +
                 " data : " + data + "\n";
     }

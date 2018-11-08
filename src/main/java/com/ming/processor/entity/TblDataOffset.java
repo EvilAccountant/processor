@@ -3,8 +3,6 @@ package com.ming.processor.entity;
 
 import org.bson.BsonTimestamp;
 
-import java.util.Date;
-
 public final class TblDataOffset {
 
     private String id;
@@ -16,10 +14,6 @@ public final class TblDataOffset {
     private double offset;
 
     private BsonTimestamp acTime;
-
-    private String acTimeValue;
-
-    private Date sendTime;
 
     private String minZone;
 
@@ -63,22 +57,6 @@ public final class TblDataOffset {
 
     public void setAcTime(BsonTimestamp acTime) {
         this.acTime = acTime;
-    }
-
-    public Date getSendTime() {
-        return sendTime;
-    }
-
-    public void setSendTime(Date sendTime) {
-        this.sendTime = sendTime;
-    }
-
-    public String getAcTimeValue() {
-        return acTimeValue;
-    }
-
-    public void setAcTimeValue(String acTimeValue) {
-        this.acTimeValue = acTimeValue;
     }
 
     public String getMinZone() {

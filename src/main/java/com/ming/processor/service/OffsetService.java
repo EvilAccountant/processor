@@ -1,5 +1,6 @@
 package com.ming.processor.service;
 
+import com.mathworks.toolbox.javabuilder.MWException;
 import com.ming.processor.entity.*;
 import com.ming.processor.repository.TblDataOffsetRepository;
 import com.ming.processor.repository.TblFilteredOffsetRepository;
@@ -21,6 +22,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,14 +30,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-@Service
 @SuppressWarnings("unchecked")
+@EnableAsync
+@Service
 public class OffsetService {
 
     /**
@@ -45,9 +48,6 @@ public class OffsetService {
 
     @Autowired
     private FilterService filterService;
-
-    @Autowired
-    private DataOffsetVoService dataOffsetVoService;
 
     @Autowired
     private TblOriginOffsetRepository tblOriginOffsetRepository;
@@ -61,32 +61,38 @@ public class OffsetService {
     private final MongoTemplate mongoTemplate = new MongoTemplate(new MongoClient("localhost", 27017), "processor");
 
     private final DateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-    private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private long time = System.currentTimeMillis() - 12 * 1000;
+    private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 
     @Value("${bridgeId}")
     String bridgeId;//桥梁id
-
     @Value("${canIds}")
     String canIds;//倾角仪ID字符串
-
     @Value("${canDistance}")
     String canDistance;//倾角仪距离字符串
-
     @Value("${canNumber}")
     int canNumber;//倾角仪数量
 
+//    @Value("${canTrigger}")
+//    boolean canTrigger;
+
     @Value("${folderPath}")
-    String folderPath;
+    String folderPath;//目录位置
+
+    @Value("${oracleUrl}")
+    String oracleUrl;//oracle数据库地址
+    @Value("${oracleUsername}")
+    String oracleUsername;//用户名
+    @Value("${oraclePassword}")
+    String oraclePassword;//密码
 
     /**
      * 读取CSV文件
      *
      * @return
      */
-    @Scheduled(fixedDelay = 60 * 1000)
+    @Transactional
+    @Scheduled(fixedDelay = 30 * 1000)
     public void getOriData() {
-        time = time + 60 * 1000;
         File folder = new File(folderPath);
         File file = null;
         RandomAccessFile raf;
@@ -137,7 +143,7 @@ public class OffsetService {
      *
      * @param records
      */
-    public void analysisRecord(Iterable<CSVRecord> records) {
+    public void analysisRecord(Iterable<CSVRecord> records) throws ParseException {
         StringBuilder date = new StringBuilder(47);
         date.append(MyUtils.getToday());//当日年月日
 
@@ -151,9 +157,13 @@ public class OffsetService {
                 continue;
             }
             index++;
-            time = record.get("系统时间").substring(2, 14);
             canId = record.get("ID号");
+            time = record.get("系统时间").substring(2, 14);
             data = record.get("数据").substring(3, 26).replace(" ", "");
+//            //052缺陷情况临时处理
+//            if (canId.equals("0x0582") && canTrigger) {
+//                continue;
+//            }
 
             String actualTime = (date.toString() + time).substring(0, 18);
             if (!timeMap.containsKey(actualTime)) {
@@ -165,7 +175,7 @@ public class OffsetService {
             date.append(MyUtils.getToday());
         }
         buildSecMap(timeMap);//组装数据
-        LOGGER.info("总共收集" + index + "条数据");
+        LOGGER.info("从CSV文件收集" + index + "条原始数据");
     }
 
     /**
@@ -173,7 +183,7 @@ public class OffsetService {
      *
      * @param timeMap
      */
-    private void buildSecMap(LinkedHashMap<String, ArrayList<String>> timeMap) {
+    private void buildSecMap(LinkedHashMap<String, ArrayList<String>> timeMap) throws ParseException {
         ArrayList<String> tempList;
         String canId;
 
@@ -198,7 +208,7 @@ public class OffsetService {
      *
      * @param secMap
      */
-    private void buildDataTeam(LinkedHashMap<String, ArrayList<String>> secMap) {
+    private void buildDataTeam(LinkedHashMap<String, ArrayList<String>> secMap) throws ParseException {
         List<String> tempList = new ArrayList<>(canNumber);
         int length = 999;
         //获取最小长度
@@ -222,65 +232,63 @@ public class OffsetService {
     /**
      * 将数据持久化
      */
-    @Transactional
-    public void onReceive(List<String> dataList) {
-        if (dataList != null && dataList.size() == canNumber) {
-            dataList.forEach(item -> System.out.println(item));
-            System.out.println("===============================================");
-            try {
-                List<TblOriginOffset> originOffsetList = toOriOffset(dataList);
-                if (!originOffsetList.isEmpty()) tblOriginOffsetRepository.insert(originOffsetList);
-            } catch (ParseException e) {
-                LOGGER.error(e);
-            }
-        }
+    public void onReceive(List<String> dataList) throws ParseException {
+        List<TblOriginOffset> originOffsetList = toOriOffset(dataList);
+        tblOriginOffsetRepository.insert(originOffsetList);
     }
 
     @Transactional
     @Scheduled(fixedRate = 60 * 1000)
     public void doFilter() {
-        List<TblMeasurePointOffset> measurePointList = getMeasurePoints();
-        long ctime = time;
-        String headTime = sdf.format(ctime - 2 * 60 * 1000 - 1);//2min
-        String endTime = sdf.format(ctime + 1);
 
-        List<TblOriginOffset> originOffsetList = tblOriginOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
+        long currentTime = System.currentTimeMillis();
+        long headTime = currentTime - 2 * 60 * 1000 - 1;//2min
+        long endTime = currentTime + 1;
+        long headTime2 = currentTime - 90 * 1000 - 1;//30s
+        long endTime2 = currentTime - 30 * 1000 + 1;//1min30s
+
+        List<TblMeasurePointOffset> measurePointList = getMeasurePoints();
+        List<TblOriginOffset> originOffsetList = mongoTemplate.find(new Query(Criteria.where("dataTime.value").gte(headTime).lte(endTime)), TblOriginOffset.class);
+        LOGGER.info("获取时间范围内的原始数据：" + originOffsetList.size());
 
         if (originOffsetList.size() > 0) {
-            LOGGER.info("获取滤波数据" + originOffsetList.size() + "条");
-            List<TblFilteredOffset> filteredList = new ArrayList<>();
-            filterService.throughFilter(originOffsetList, filteredList, canNumber);
-            tblFilteredOffsetRepository.insert(filteredList);
-            LOGGER.info("滤波完成");
+            try {
+                List<TblFilteredOffset> filteredList = new ArrayList<>();
+                String[] canIdArr = canIds.split(",");
+                filterService.throughFilter(originOffsetList, filteredList, canNumber, canIdArr);
+                tblFilteredOffsetRepository.insert(filteredList);
+                LOGGER.info("完成滤波数据" + filteredList.size() + "条");
 
-            headTime = sdf.format(ctime - 1.5 * 60 * 1000 - 1);//30s
-            endTime = sdf.format(ctime - 0.5 * 60 * 1000 + 1);//1min30s
-            filteredList = tblFilteredOffsetRepository.findByDataTimeValueBetweenOrderByDataTimeValue(headTime, endTime);
-            HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
-            List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
+                filteredList = mongoTemplate.find(new Query(Criteria.where("dataTime.value").gte(headTime2).lte(endTime2)), TblFilteredOffset.class);
+                List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
+                HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
 
-            for (int i = 0; i < filteredList.size(); i++) {
-                filterTempList.add(filteredList.get(i));
-                if (filterTempList.size() == 7) {
-                    //存放倾角值
-                    filterTempList.forEach(item -> canIdRadianMap.put(item.getCanId(), parseCoordinateRadian(item.getValueX(), item.getValueY()).getY()));
-                    if (canIdRadianMap.size() == measurePointList.size()) {
-                        addEightPointOffset(canIdRadianMap, measurePointList, filteredList.get(i).getDataTime(), bridgeId);
+                for (int i = 0; i < filteredList.size(); i++) {
+                    filterTempList.add(filteredList.get(i));
+                    if (filterTempList.size() == canNumber) {
+                        //存放倾角值
+                        filterTempList.forEach(item -> canIdRadianMap.put(item.getCanId(), parseCoordinateRadian(item.getValueX(), item.getValueY()).getY()));
+                        if (canIdRadianMap.size() == measurePointList.size()) {
+                            addEightPointOffset(canIdRadianMap, measurePointList, filteredList.get(i).getDataTime(), bridgeId);
+                        }
+                        canIdRadianMap.clear();
+                        filterTempList.clear();
                     }
-                    canIdRadianMap.clear();
-                    filterTempList.clear();
                 }
+                LOGGER.info("挠度换算数据完成" + filteredList.size() + "条");
+            } catch (MWException e) {
+                LOGGER.error(e);
+            } catch (Exception e) {
+                LOGGER.error(e);
             }
-            LOGGER.info("挠度数据计算完成！");
         }
-
     }
 
     /**
      * 以秒为单位取出位移值并计算最大值、最小值、平均值
      */
     @Transactional
-    @Scheduled(fixedDelay = 3 * 60 * 1000)
+    @Scheduled(fixedRate = 3 * 60 * 1000)
     public void getOffsetResult() {
         Query query = new Query();
         query.addCriteria(Criteria.where("uploaded").is("0"));
@@ -288,25 +296,28 @@ public class OffsetService {
 
         Aggregation aggregation = Aggregation.newAggregation(
                 Aggregation.match(Criteria.where("uploaded").is("0")),
+                Aggregation.match(Criteria.where("measurePoint").is("WY-02-Q-01")),
                 Aggregation.group("minZone", "measurePoint")
                         .min("offset").as("minOffset")
                         .max("offset").as("maxOffset")
                         .avg("offset").as("avgOffset"),
-                Aggregation.sort(Sort.Direction.ASC, "minZone")
-        );
+                Aggregation.sort(Sort.Direction.ASC, "minZone"));
         AggregationResults<DataOffsetVo> output = mongoTemplate.aggregate(aggregation, "tblDataOffset", DataOffsetVo.class);
-
+        LOGGER.info("聚合查询结果：" + output.getMappedResults().size() + "条");
+        mongoTemplate.updateMulti(query, update, TblDataOffset.class);
         if (output.getMappedResults().size() > 0) {
             List<DataOffsetVo> voList = new ArrayList<>();
             for (Iterator<DataOffsetVo> iterator = output.getMappedResults().iterator(); iterator.hasNext(); ) {
                 DataOffsetVo vo = iterator.next();
                 voList.add(vo);
-                System.out.println(vo.toString());
             }
-            dataOffsetVoService.insertAll(transtoOrcl(voList));
-            mongoTemplate.updateMulti(query, update, TblDataOffset.class);
+            try {
+                insertAll(transformOrcList(voList));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
-        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
+//        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
     }
 
     /**
@@ -333,7 +344,6 @@ public class OffsetService {
             storeOffsetList.get(i).setBridgeId(bridgeId);
             storeOffsetList.get(i).setMeasurePoint(String.format("WY-%02d-Q-01", i + 1));
             storeOffsetList.get(i).setAcTime(acTime);
-            storeOffsetList.get(i).setAcTimeValue(sdf.format(acTime.getValue()));
             storeOffsetList.get(i).setMinZone(sdfm.format(acTime.getValue()));
             storeOffsetList.get(i).setUploaded("0");
         }
@@ -379,7 +389,6 @@ public class OffsetService {
             offset.setValueX(MyUtils.decimalParse(xStr));
             offset.setValueY(MyUtils.decimalParse(yStr));
             offset.setDataTime(new BsonTimestamp(sdf.parse(time).getTime()));
-            offset.setDataTimeValue(time);
             originOffsetList.add(offset);
         }
         return originOffsetList;
@@ -388,38 +397,60 @@ public class OffsetService {
     /**
      * 转化为ORACLE数据库存储对象
      *
-     * @param dataOffsetVoList
+     * @param aggVoList
      * @return
      */
-    private List<TblDataOffsetToOrcl> transtoOrcl(List<DataOffsetVo> dataOffsetVoList) {
-        int size = dataOffsetVoList.size();
-        int tripleSize = size * 3;//最大 最小 平均
-        List<TblDataOffsetToOrcl> dataOffsetlList = new ArrayList<>(tripleSize);
+    private List<TblDataOffsetToOrcl> transformOrcList(List<DataOffsetVo> aggVoList) throws ParseException {
+        List<TblDataOffsetToOrcl> dataOffsetList = new ArrayList<>();
+        int size = aggVoList.size();
         DataOffsetVo dataOffsetVo;
-        try {
-            for (int i = 0; i < size; i++) {
-                dataOffsetVo = dataOffsetVoList.get(i);
-                for (int j = 0; j < 3; j++) {
-                    TblDataOffsetToOrcl dataOffset = new TblDataOffsetToOrcl();
-                    dataOffset.setId(MyUtils.generateUUID());
-                    dataOffset.setBridgeId(bridgeId);
-                    dataOffset.setMeasurePoint(dataOffsetVo.getMeasurePoint());
-                    if (j == 0) {
-                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getMinOffset()));
-                    }
-                    if (j == 1) {
-                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getMaxOffset()));
-                    }
-                    if (j == 2) {
-                        dataOffset.setOffset(Double.valueOf(dataOffsetVo.getAvgOffset()));
-                    }
-                    dataOffset.setAcTime(new Timestamp(sdfm.parse(dataOffsetVo.getMinZone()).getTime()));
+        for (int i = 0; i < size; i++) {
+            dataOffsetVo = aggVoList.get(i);
+            for (int j = 0; j < 3; j++) {
+                TblDataOffsetToOrcl orcVo = new TblDataOffsetToOrcl();
+                orcVo.setId(MyUtils.generateUUID());
+                orcVo.setBridgeId(bridgeId);
+                orcVo.setMeasurePoint(dataOffsetVo.getMeasurePoint());
+                if (j == 0) {
+                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getMinOffset()));
                 }
+                if (j == 1) {
+                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getMaxOffset()));
+                }
+                if (j == 2) {
+                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getAvgOffset()));
+                }
+                orcVo.setAcTime(new Timestamp(sdfm.parse(dataOffsetVo.getMinZone()).getTime()));
+                dataOffsetList.add(orcVo);
             }
-        } catch (ParseException e) {
-            LOGGER.error(e);
         }
-        return dataOffsetlList;
+        return dataOffsetList;
+    }
+
+    private void insertAll(List<TblDataOffsetToOrcl> offsetList) throws SQLException, ClassNotFoundException {
+        DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
+        Class.forName("oracle.jdbc.driver.OracleDriver");
+        String sql = "INSERT INTO TBL_DATA_OFFSET(ID,BRIDGE_ID,MEASURE_POINT,OFFSET,AC_TIME) VALUES(?,?,?,?,?)";
+
+        try (Connection connection = DriverManager.getConnection(oracleUrl, oracleUsername, oraclePassword);
+             PreparedStatement preStat = connection.prepareStatement(sql)) {
+            connection.setAutoCommit(false);
+
+            TblDataOffsetToOrcl offset;
+            for (int i = 0; i < offsetList.size(); i++) {
+                offset = offsetList.get(i);
+                preStat.setString(1, offset.getId());
+                preStat.setString(2, offset.getBridgeId());
+                preStat.setString(3, offset.getMeasurePoint());
+                preStat.setDouble(4, offset.getOffset());
+                preStat.setTimestamp(5, offset.getAcTime());
+                preStat.addBatch();
+            }
+            preStat.executeBatch();
+            connection.commit();
+            LOGGER.info("存入ORACLE数据库" + offsetList.size());
+        }
+
     }
 
     /**
@@ -439,5 +470,6 @@ public class OffsetService {
         PrintWriter pw = new PrintWriter(file);
         pw.close();
     }
+
 
 }

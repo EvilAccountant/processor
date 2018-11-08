@@ -39,6 +39,7 @@ dependencies {
     compile group: 'mysql', name: 'mysql-connector-java', version: '8.0.13'
 
 //    compile group: 'org.springframework.boot', name: 'spring-boot-starter-jdbc', version: '2.1.0.RELEASE'
+    compile group: 'org.springframework.boot', name: 'spring-boot-starter-aop', version: '2.1.0.RELEASE'
     compile('org.springframework.boot:spring-boot-starter-data-mongodb')
     compile('org.springframework.boot:spring-boot-starter-web')
     runtime('org.springframework.boot:spring-boot-devtools')
