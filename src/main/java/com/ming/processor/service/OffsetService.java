@@ -22,7 +22,6 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +36,6 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 @SuppressWarnings("unchecked")
-@EnableAsync
 @Service
 public class OffsetService {
 
@@ -48,6 +46,9 @@ public class OffsetService {
 
     @Autowired
     private FilterService filterService;
+
+    @Autowired
+    private DataService dataService;
 
     @Autowired
     private TblOriginOffsetRepository tblOriginOffsetRepository;
@@ -72,18 +73,8 @@ public class OffsetService {
     @Value("${canNumber}")
     int canNumber;//倾角仪数量
 
-//    @Value("${canTrigger}")
-//    boolean canTrigger;
-
     @Value("${folderPath}")
     String folderPath;//目录位置
-
-    @Value("${oracleUrl}")
-    String oracleUrl;//oracle数据库地址
-    @Value("${oracleUsername}")
-    String oracleUsername;//用户名
-    @Value("${oraclePassword}")
-    String oraclePassword;//密码
 
     /**
      * 读取CSV文件
@@ -160,10 +151,6 @@ public class OffsetService {
             canId = record.get("ID号");
             time = record.get("系统时间").substring(2, 14);
             data = record.get("数据").substring(3, 26).replace(" ", "");
-//            //052缺陷情况临时处理
-//            if (canId.equals("0x0582") && canTrigger) {
-//                continue;
-//            }
 
             String actualTime = (date.toString() + time).substring(0, 18);
             if (!timeMap.containsKey(actualTime)) {
@@ -288,7 +275,7 @@ public class OffsetService {
      * 以秒为单位取出位移值并计算最大值、最小值、平均值
      */
     @Transactional
-    @Scheduled(fixedRate = 3 * 60 * 1000)
+    @Scheduled(fixedRate = 30 * 1000)
     public void getOffsetResult() {
         Query query = new Query();
         query.addCriteria(Criteria.where("uploaded").is("0"));
@@ -305,6 +292,7 @@ public class OffsetService {
         AggregationResults<DataOffsetVo> output = mongoTemplate.aggregate(aggregation, "tblDataOffset", DataOffsetVo.class);
         LOGGER.info("聚合查询结果：" + output.getMappedResults().size() + "条");
         mongoTemplate.updateMulti(query, update, TblDataOffset.class);
+//        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
         if (output.getMappedResults().size() > 0) {
             List<DataOffsetVo> voList = new ArrayList<>();
             for (Iterator<DataOffsetVo> iterator = output.getMappedResults().iterator(); iterator.hasNext(); ) {
@@ -312,12 +300,11 @@ public class OffsetService {
                 voList.add(vo);
             }
             try {
-                insertAll(transformOrcList(voList));
+                dataService.insertAll(transformOrcList(voList));
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.error(e);
             }
         }
-//        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
     }
 
     /**
@@ -427,32 +414,6 @@ public class OffsetService {
         return dataOffsetList;
     }
 
-    private void insertAll(List<TblDataOffsetToOrcl> offsetList) throws SQLException, ClassNotFoundException {
-        DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
-        Class.forName("oracle.jdbc.driver.OracleDriver");
-        String sql = "INSERT INTO TBL_DATA_OFFSET(ID,BRIDGE_ID,MEASURE_POINT,OFFSET,AC_TIME) VALUES(?,?,?,?,?)";
-
-        try (Connection connection = DriverManager.getConnection(oracleUrl, oracleUsername, oraclePassword);
-             PreparedStatement preStat = connection.prepareStatement(sql)) {
-            connection.setAutoCommit(false);
-
-            TblDataOffsetToOrcl offset;
-            for (int i = 0; i < offsetList.size(); i++) {
-                offset = offsetList.get(i);
-                preStat.setString(1, offset.getId());
-                preStat.setString(2, offset.getBridgeId());
-                preStat.setString(3, offset.getMeasurePoint());
-                preStat.setDouble(4, offset.getOffset());
-                preStat.setTimestamp(5, offset.getAcTime());
-                preStat.addBatch();
-            }
-            preStat.executeBatch();
-            connection.commit();
-            LOGGER.info("存入ORACLE数据库" + offsetList.size());
-        }
-
-    }
-
     /**
      * 解析倾角值
      */
@@ -470,6 +431,5 @@ public class OffsetService {
         PrintWriter pw = new PrintWriter(file);
         pw.close();
     }
-
 
 }
