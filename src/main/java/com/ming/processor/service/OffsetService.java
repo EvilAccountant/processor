@@ -22,6 +22,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -224,6 +225,7 @@ public class OffsetService {
         tblOriginOffsetRepository.insert(originOffsetList);
     }
 
+    @Async
     @Transactional
     @Scheduled(fixedRate = 60 * 1000)
     public void doFilter() {
