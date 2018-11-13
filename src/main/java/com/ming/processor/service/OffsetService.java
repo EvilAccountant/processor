@@ -2,9 +2,6 @@ package com.ming.processor.service;
 
 import com.mathworks.toolbox.javabuilder.MWException;
 import com.ming.processor.entity.*;
-import com.ming.processor.repository.TblDataOffsetRepository;
-import com.ming.processor.repository.TblFilteredOffsetRepository;
-import com.ming.processor.repository.TblOriginOffsetRepository;
 import com.ming.processor.util.Inclinator;
 import com.ming.processor.util.MyUtils;
 import com.mongodb.MongoClient;
@@ -30,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
-import java.sql.*;
+import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -40,42 +37,34 @@ import java.util.*;
 @Service
 public class OffsetService {
 
-    /**
-     * 日志对象
-     */
-    private final static Logger LOGGER = LogManager.getLogger(OffsetService.class);
-
     @Autowired
     private FilterService filterService;
 
     @Autowired
     private DataService dataService;
 
-    @Autowired
-    private TblOriginOffsetRepository tblOriginOffsetRepository;
+    private MongoTemplate mongoTemplate;
 
     @Autowired
-    private TblDataOffsetRepository tblDataOffsetRepository;
+    public void setMongoTemplate(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = new MongoTemplate(new MongoClient("localhost", 27017), "processor");
+    }
 
-    @Autowired
-    private TblFilteredOffsetRepository tblFilteredOffsetRepository;
+    @Value("${bridgeId}")
+    private String bridgeId;//桥梁id
+    @Value("${canIds}")
+    private String canIds;//倾角仪ID字符串
+    @Value("${canDistance}")
+    private String canDistance;//倾角仪距离字符串
+    @Value("${canNumber}")
+    private int canNumber;//倾角仪数量
+    @Value("${folderPath}")
+    private String folderPath;//目录位置
 
-    private final MongoTemplate mongoTemplate = new MongoTemplate(new MongoClient("localhost", 27017), "processor");
-
+    private final static Logger LOGGER = LogManager.getLogger(OffsetService.class);
     private final DateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
     private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 
-    @Value("${bridgeId}")
-    String bridgeId;//桥梁id
-    @Value("${canIds}")
-    String canIds;//倾角仪ID字符串
-    @Value("${canDistance}")
-    String canDistance;//倾角仪距离字符串
-    @Value("${canNumber}")
-    int canNumber;//倾角仪数量
-
-    @Value("${folderPath}")
-    String folderPath;//目录位置
 
     /**
      * 读取CSV文件
@@ -92,7 +81,6 @@ public class OffsetService {
         FileLock fileLock;
 
         try {
-
             File[] fileList = folder.listFiles();
             for (int i = 0; i < fileList.length; i++) {
                 if (fileList[i].length() == 0) {
@@ -113,6 +101,7 @@ public class OffsetService {
                             .parse(in)
                             .getRecords();
                 }
+
                 raf = new RandomAccessFile(file, "rw");
                 channel = raf.getChannel();
                 fileLock = channel.tryLock();
@@ -222,7 +211,7 @@ public class OffsetService {
      */
     public void onReceive(List<String> dataList) throws ParseException {
         List<TblOriginOffset> originOffsetList = toOriOffset(dataList);
-        tblOriginOffsetRepository.insert(originOffsetList);
+        mongoTemplate.insert(originOffsetList, TblOriginOffset.class);
     }
 
     @Async
@@ -245,7 +234,7 @@ public class OffsetService {
                 List<TblFilteredOffset> filteredList = new ArrayList<>();
                 String[] canIdArr = canIds.split(",");
                 filterService.throughFilter(originOffsetList, filteredList, canNumber, canIdArr);
-                tblFilteredOffsetRepository.insert(filteredList);
+                mongoTemplate.insert(filteredList, TblFilteredOffset.class);
                 LOGGER.info("完成滤波数据" + filteredList.size() + "条");
 
                 filteredList = mongoTemplate.find(new Query(Criteria.where("dataTime.value").gte(headTime2).lte(endTime2)), TblFilteredOffset.class);
@@ -277,7 +266,7 @@ public class OffsetService {
      * 以秒为单位取出位移值并计算最大值、最小值、平均值
      */
     @Transactional
-    @Scheduled(fixedRate = 30 * 1000)
+    @Scheduled(fixedRate = 60 * 1000)
     public void getOffsetResult() {
         Query query = new Query();
         query.addCriteria(Criteria.where("uploaded").is("0"));
@@ -337,7 +326,7 @@ public class OffsetService {
             storeOffsetList.get(i).setUploaded("0");
         }
         //保存计算结果
-        tblDataOffsetRepository.insert(storeOffsetList);
+        mongoTemplate.insert(storeOffsetList, TblDataOffset.class);
     }
 
     /**
@@ -363,7 +352,9 @@ public class OffsetService {
      * @return
      */
     private List<TblOriginOffset> toOriOffset(List<String> dataList) throws ParseException {
+
         if (dataList.isEmpty()) return null;
+
         List<TblOriginOffset> originOffsetList = new ArrayList<>(dataList.size());
         for (int i = 0; i < dataList.size(); i++) {
             //解析倾角仪数据
@@ -400,15 +391,9 @@ public class OffsetService {
                 orcVo.setId(MyUtils.generateUUID());
                 orcVo.setBridgeId(bridgeId);
                 orcVo.setMeasurePoint(dataOffsetVo.getMeasurePoint());
-                if (j == 0) {
-                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getMinOffset()));
-                }
-                if (j == 1) {
-                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getMaxOffset()));
-                }
-                if (j == 2) {
-                    orcVo.setOffset(Double.valueOf(dataOffsetVo.getAvgOffset()));
-                }
+                if (j == 0) orcVo.setOffset(Double.valueOf(dataOffsetVo.getMinOffset()));
+                if (j == 1) orcVo.setOffset(Double.valueOf(dataOffsetVo.getMaxOffset()));
+                if (j == 2) orcVo.setOffset(Double.valueOf(dataOffsetVo.getAvgOffset()));
                 orcVo.setAcTime(new Timestamp(sdfm.parse(dataOffsetVo.getMinZone()).getTime()));
                 dataOffsetList.add(orcVo);
             }

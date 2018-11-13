@@ -14,11 +14,11 @@ import java.util.List;
 public class DataService {
 
     @Value("${oracleUrl}")
-    String oracleUrl;//oracle数据库地址
+    private String oracleUrl;//oracle数据库地址
     @Value("${oracleUsername}")
-    String oracleUsername;//用户名
+    private String oracleUsername;//用户名
     @Value("${oraclePassword}")
-    String oraclePassword;//密码
+    private String oraclePassword;//密码
 
     public void insertAll(List<TblDataOffsetToOrcl> offsetList) throws SQLException, ClassNotFoundException {
         DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
@@ -45,4 +45,5 @@ public class DataService {
         }
 
     }
+
 }

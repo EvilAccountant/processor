@@ -8,25 +8,22 @@ import com.ming.processor.entity.TblOriginOffset;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.*;
 
 @Service
 @SuppressWarnings("unchecked")
 public class FilterService {
 
     @Value("${fPass}")
-    double fPass;//通带截止频率
+    private double fPass;//通带截止频率
     @Value("${fStop}")
-    double fStop;//阻带截止频率
+    private double fStop;//阻带截止频率
     @Value("${aPass}")
-    double aPass;//通带最大衰减
+    private double aPass;//通带最大衰减
     @Value("${aStop}")
-    double aStop;//阻带最小衰减
+    private double aStop;//阻带最小衰减
     @Value("${fSample}")
-    double fSample;//采样频率
+    private double fSample;//采样频率
 
     /**
      * 将数据滤波并保存
@@ -98,14 +95,16 @@ public class FilterService {
     public double[] lowPassFilter(List<Double> signalList) throws MWException {
 //        double[] signal = signalList.stream().mapToDouble(Double::doubleValue).toArray(); //via method reference
         double[] signal = signalList.stream().mapToDouble(d -> d).toArray(); //identity function, Java unboxes automatically to get the double value
+        double[] outData = new double[signal.length];
 
         Filter filter = new Filter();
         Object[] result = filter.doFilter(1, fPass, fStop, aPass, aStop, fSample, signal);
         MWNumericArray temp = (MWNumericArray) result[0];
         double[][] weights = (double[][]) temp.toDoubleArray();
-        double[] outData = weights[0];
+        System.arraycopy(weights[0], 0, outData, 0, weights[0].length);
 
-        Filter.disposeAllInstances();
+        temp.dispose();
+        filter.dispose();
         return outData;
     }
 
