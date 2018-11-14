@@ -15,6 +15,6 @@ public class ScheduleConfig implements SchedulingConfigurer, AsyncConfigurer {
     @Override
     public void configureTasks(ScheduledTaskRegistrar scheduledTaskRegistrar) {
         //参数传入一个size为50的线程池
-        scheduledTaskRegistrar.setScheduler(Executors.newScheduledThreadPool(50));
+        scheduledTaskRegistrar.setScheduler(Executors.newScheduledThreadPool(20));
     }
 }

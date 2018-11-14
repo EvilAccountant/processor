@@ -65,7 +65,6 @@ public class OffsetService {
     private final DateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
     private final DateFormat sdfm = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 
-
     /**
      * 读取CSV文件
      *
@@ -214,7 +213,7 @@ public class OffsetService {
         mongoTemplate.insert(originOffsetList, TblOriginOffset.class);
     }
 
-    @Async
+    @Async("threadPoolTaskExecutor")
     @Transactional
     @Scheduled(fixedRate = 60 * 1000)
     public void doFilter() {
@@ -266,7 +265,7 @@ public class OffsetService {
      * 以秒为单位取出位移值并计算最大值、最小值、平均值
      */
     @Transactional
-    @Scheduled(fixedRate = 60 * 1000)
+    @Scheduled(fixedRate = 3 * 60 * 1000)
     public void getOffsetResult() {
         Query query = new Query();
         query.addCriteria(Criteria.where("uploaded").is("0"));
