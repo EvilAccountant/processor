@@ -1,6 +1,5 @@
 package com.ming.processor.service;
 
-import com.mathworks.toolbox.javabuilder.MWException;
 import com.ming.processor.entity.*;
 import com.ming.processor.util.Inclinator;
 import com.ming.processor.util.MyUtils;
@@ -256,8 +255,6 @@ public class OffsetService {
                     }
                 }
                 LOGGER.info("挠度换算数据完成共 " + filteredList.size() + " 条");
-            } catch (MWException e) {
-                LOGGER.error(e);
             } catch (Exception e) {
                 LOGGER.error(e);
             }
