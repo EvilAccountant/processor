@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--变量，用${param}引用-->
+    <properties>
+        <property name="log_pattern">[%date{yyyy-MM-dd HH:mm:ss}] %-5level %class{36} %line %method - %msg%xEx%n
+        </property>
+        <property name="log_path">D:\ProcessorLogs</property>
+        <property name="every_file_size">5M</property>
+        <property name="output_log_level">debug</property>
+        <property name="charset">UTF-8</property>
+    </properties>
+    <!--控制台输出-->
+    <appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <ThresholdFilter level="debug" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${log_pattern}"/>
+        </Console>
+        <!--debug日志文件-->
+        <RollingFile name="app_debug"
+                     fileName="${log_path}/debug/debug.log"
+                     filePattern="${log_path}/debug/debug-%d{yyyy-MM-dd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="info" onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="debug" onMatch="ACCEPT" onMismatch="NEUTRAL"/>
+            </Filters>
+            <PatternLayout charset="${charset}" pattern="${log_pattern}"/>
+            <SizeBasedTriggeringPolicy size="${every_file_size}"/>
+        </RollingFile>
+        <!--info日志文件-->
+        <RollingFile name="app_info"
+                     fileName="${log_path}/info/info.·log"
+                     filePattern="${log_path}/info/info-%d{yyyy-MM-dd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="warn" onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="info" onMatch="ACCEPT" onMismatch="DENY"/>
+            </Filters>
+            <PatternLayout charset="${charset}" pattern="${log_pattern}"/>
+            <SizeBasedTriggeringPolicy size="${every_file_size}"/>
+        </RollingFile>
+        <!--error日志文件-->
+        <RollingFile name="app_error"
+                     fileName="${log_path}/error/error.log"
+                     filePattern="${log_path}/error/error-%d{yyyy-MM-dd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="warn" onMatch="ACCEPT" onMismatch="DENY"/>
+            </Filters>
+            <PatternLayout charset="${charset}" pattern="${log_pattern}"/>
+            <SizeBasedTriggeringPolicy size="${every_file_size}"/>
+        </RollingFile>
+    </appenders>
+    <!--添加appender至root-->
+    <loggers>
+        <root level="${output_log_level}">
+            <appender-ref ref="Console"/>
+            <appender-ref ref="app_debug"/>
+            <appender-ref ref="app_info"/>
+            <appender-ref ref="app_error"/>
+        </root>
+    </loggers>
+</configuration>

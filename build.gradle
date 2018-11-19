@@ -29,20 +29,10 @@ repositories {
 dependencies {
     compile fileTree( dir:'src/main/resources/lib',includes:['*jar'])
 
-    compile group: 'org.apache.poi', name: 'poi', version: '4.0.0'
-    compile group: 'org.apache.poi', name: 'poi-ooxml', version: '4.0.0'
     compile group: 'org.apache.commons', name: 'commons-csv', version: '1.6'
-    compile group: 'net.sourceforge.javacsv', name: 'javacsv', version: '2.0'
     compile group: 'gov.nist.math', name: 'jama', version: '1.0.3'
-
-    compile group: 'org.mongodb', name: 'mongo-java-driver', version: '3.8.2'
-    compile group: 'mysql', name: 'mysql-connector-java', version: '8.0.13'
-
-//    compile group: 'org.springframework.boot', name: 'spring-boot-starter-jdbc', version: '2.1.0.RELEASE'
-    compile group: 'org.springframework.boot', name: 'spring-boot-starter-aop', version: '2.1.0.RELEASE'
     compile('org.springframework.boot:spring-boot-starter-data-mongodb')
     compile('org.springframework.boot:spring-boot-starter-web')
-    runtime('org.springframework.boot:spring-boot-devtools')
     testCompile('org.springframework.boot:spring-boot-starter-test')
 }
 

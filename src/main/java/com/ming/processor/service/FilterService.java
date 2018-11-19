@@ -32,8 +32,8 @@ public class FilterService {
      * @param offsetList
      * @param filteredList
      */
-    public void throughFilter(List<TblOriginOffset> offsetList, List<TblFilteredOffset> filteredList, int canNumber, String[] canIdArr) throws MWException {
-        System.out.println("滤波仪式，现在开始");
+    public void throughFilter(List<TblOriginOffset> offsetList, List<TblFilteredOffset> filteredList, int canNumber, String[] canIdArr) {
+        System.out.println("滤波仪式开始");
         //按ID存放数据
         LinkedHashMap<String, List<Double>> canMapOVX = initCanMap(canNumber, canIdArr);
         LinkedHashMap<String, List<Double>> canMapOVY = initCanMap(canNumber, canIdArr);
@@ -92,19 +92,26 @@ public class FilterService {
      * @param signalList
      * @return
      */
-    public double[] lowPassFilter(List<Double> signalList) throws MWException {
+    public double[] lowPassFilter(List<Double> signalList) {
 //        double[] signal = signalList.stream().mapToDouble(Double::doubleValue).toArray(); //via method reference
         double[] signal = signalList.stream().mapToDouble(d -> d).toArray(); //identity function, Java unboxes automatically to get the double value
         double[] outData = new double[signal.length];
-
-        Filter filter = new Filter();
-        Object[] result = filter.doFilter(1, fPass, fStop, aPass, aStop, fSample, signal);
-        MWNumericArray temp = (MWNumericArray) result[0];
-        double[][] weights = (double[][]) temp.toDoubleArray();
-        System.arraycopy(weights[0], 0, outData, 0, weights[0].length);
-
-        temp.dispose();
-        filter.dispose();
+        Filter filter = null;
+        MWNumericArray temp = null;
+        try {
+            filter = new Filter();
+            Object[] result = filter.doFilter(1, fPass, fStop, aPass, aStop, fSample, signal);
+            temp = (MWNumericArray) result[0];
+            double[][] weights = (double[][]) temp.toDoubleArray();
+            System.arraycopy(weights[0], 0, outData, 0, weights[0].length);
+        } catch (MWException e) {
+            System.out.println("lowPassFilter异常");
+            e.printStackTrace();
+        } finally {
+            System.out.println("lowPassFilter结束");
+            if (temp != null) temp.dispose();
+            if (filter != null) filter.dispose();
+        }
         return outData;
     }
 

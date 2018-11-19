@@ -1,7 +1,7 @@
 package com.ming.processor.entity;
 
 
-import org.bson.BsonTimestamp;
+import java.util.Date;
 
 public final class TblDataOffset {
 
@@ -13,7 +13,7 @@ public final class TblDataOffset {
 
     private double offset;
 
-    private BsonTimestamp acTime;
+    private Date acTime;
 
     private String minZone;
 
@@ -51,11 +51,11 @@ public final class TblDataOffset {
         this.offset = offset;
     }
 
-    public BsonTimestamp getAcTime() {
+    public Date getAcTime() {
         return acTime;
     }
 
-    public void setAcTime(BsonTimestamp acTime) {
+    public void setAcTime(Date acTime) {
         this.acTime = acTime;
     }
 

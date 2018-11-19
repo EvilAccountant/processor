@@ -1,6 +1,6 @@
 package com.ming.processor.entity;
 
-import org.bson.BsonTimestamp;
+import java.util.Date;
 
 public final class TblOriginOffset {
 
@@ -12,7 +12,7 @@ public final class TblOriginOffset {
 
     private double valueY;
 
-    private BsonTimestamp dataTime;
+    private Date dataTime;
 
     public String getCanId() {
         return canId;
@@ -46,18 +46,12 @@ public final class TblOriginOffset {
         this.valueY = valueY;
     }
 
-    public BsonTimestamp getDataTime() {
+    public Date getDataTime() {
         return dataTime;
     }
 
-    public void setDataTime(BsonTimestamp dataTime) {
+    public void setDataTime(Date dataTime) {
         this.dataTime = dataTime;
     }
 
-    @Override
-    public String toString() {
-        return " canId : " + canId + "\n" +
-                " valueX : " + valueX + " valueY : " + valueY + "\n" +
-                " data : " + data + "\n";
-    }
 }

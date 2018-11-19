@@ -1,12 +1,12 @@
 package com.ming.processor.entity;
 
-import org.bson.BsonTimestamp;
+import java.util.Date;
 
 public final class TblFilteredOffset {
 
     private String canId;
 
-    private BsonTimestamp dataTime;
+    private Date dataTime;
 
     private double oriValueX;
 
@@ -24,11 +24,11 @@ public final class TblFilteredOffset {
         this.canId = canId;
     }
 
-    public BsonTimestamp getDataTime() {
+    public Date getDataTime() {
         return dataTime;
     }
 
-    public void setDataTime(BsonTimestamp dataTime) {
+    public void setDataTime(Date dataTime) {
         this.dataTime = dataTime;
     }
 

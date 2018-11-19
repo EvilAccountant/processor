@@ -9,7 +9,6 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.bson.BsonTimestamp;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
@@ -42,6 +41,9 @@ public class OffsetService {
 
     @Autowired
     private DataService dataService;
+
+//    @Autowired
+//    private ThreadPoolTaskExecutor pool;
 
     private MongoTemplate mongoTemplate;
 
@@ -151,7 +153,7 @@ public class OffsetService {
             date.append(MyUtils.getToday());
         }
         buildSecMap(timeMap);//组装数据
-        LOGGER.info("从CSV文件收集" + index + "条原始数据");
+        LOGGER.info("从CSV文件收集原始数据共 " + index + " 条");
     }
 
     /**
@@ -217,16 +219,17 @@ public class OffsetService {
     @Transactional
     @Scheduled(fixedRate = 60 * 1000)
     public void doFilter() {
+//        LOGGER.info("----------------thread pool count: {}", pool.getThreadPoolExecutor().getQueue().size());
 
         long currentTime = System.currentTimeMillis();
-        long headTime = currentTime - 2 * 60 * 1000 - 1;//2min
-        long endTime = currentTime + 1;
-        long headTime2 = currentTime - 90 * 1000 - 1;//30s
-        long endTime2 = currentTime - 30 * 1000 + 1;//1min30s
+        Date headTime = new Date(currentTime - 2 * 60 * 1000 - 1);//2min
+        Date endTime = new Date(currentTime + 1);
+        Date headTime2 = new Date(currentTime - 90 * 1000 - 1);//30s
+        Date endTime2 = new Date(currentTime - 30 * 1000 + 1);//1min30s
 
         List<TblMeasurePointOffset> measurePointList = getMeasurePoints();
-        List<TblOriginOffset> originOffsetList = mongoTemplate.find(new Query(Criteria.where("dataTime.value").gte(headTime).lte(endTime)), TblOriginOffset.class);
-        LOGGER.info("获取时间范围内的原始数据：" + originOffsetList.size());
+        List<TblOriginOffset> originOffsetList = mongoTemplate.find(new Query(Criteria.where("dataTime").gte(headTime).lte(endTime)), TblOriginOffset.class);
+        LOGGER.info("获取时间范围内的原始数据：" + originOffsetList.size() + " 条");
 
         if (originOffsetList.size() > 0) {
             try {
@@ -234,9 +237,9 @@ public class OffsetService {
                 String[] canIdArr = canIds.split(",");
                 filterService.throughFilter(originOffsetList, filteredList, canNumber, canIdArr);
                 mongoTemplate.insert(filteredList, TblFilteredOffset.class);
-                LOGGER.info("完成滤波数据" + filteredList.size() + "条");
+                LOGGER.info("完成滤波数据共 " + filteredList.size() + " 条");
 
-                filteredList = mongoTemplate.find(new Query(Criteria.where("dataTime.value").gte(headTime2).lte(endTime2)), TblFilteredOffset.class);
+                filteredList = mongoTemplate.find(new Query(Criteria.where("dataTime").gte(headTime2).lte(endTime2)), TblFilteredOffset.class);
                 List<TblFilteredOffset> filterTempList = new ArrayList<>(canNumber);
                 HashMap<String, Double> canIdRadianMap = new HashMap<>(canNumber);
 
@@ -252,7 +255,7 @@ public class OffsetService {
                         filterTempList.clear();
                     }
                 }
-                LOGGER.info("挠度换算数据完成" + filteredList.size() + "条");
+                LOGGER.info("挠度换算数据完成共 " + filteredList.size() + " 条");
             } catch (MWException e) {
                 LOGGER.error(e);
             } catch (Exception e) {
@@ -265,8 +268,9 @@ public class OffsetService {
      * 以秒为单位取出位移值并计算最大值、最小值、平均值
      */
     @Transactional
-    @Scheduled(fixedRate = 3 * 60 * 1000)
+    @Scheduled(fixedRate = 1 * 60 * 1000)
     public void getOffsetResult() {
+        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class);
         Query query = new Query();
         query.addCriteria(Criteria.where("uploaded").is("0"));
         Update update = Update.update("uploaded", "1");
@@ -280,9 +284,8 @@ public class OffsetService {
                         .avg("offset").as("avgOffset"),
                 Aggregation.sort(Sort.Direction.ASC, "minZone"));
         AggregationResults<DataOffsetVo> output = mongoTemplate.aggregate(aggregation, "tblDataOffset", DataOffsetVo.class);
-        LOGGER.info("聚合查询结果：" + output.getMappedResults().size() + "条");
+        LOGGER.info("聚合查询结果：" + output.getMappedResults().size() + " 条");
         mongoTemplate.updateMulti(query, update, TblDataOffset.class);
-//        mongoTemplate.remove(new Query().addCriteria(Criteria.where("uploaded").is("1")), TblDataOffset.class, "tblDataOffset");
         if (output.getMappedResults().size() > 0) {
             List<DataOffsetVo> voList = new ArrayList<>();
             for (Iterator<DataOffsetVo> iterator = output.getMappedResults().iterator(); iterator.hasNext(); ) {
@@ -297,6 +300,20 @@ public class OffsetService {
         }
     }
 
+    @Scheduled(cron = "0 0 12 * * ?")
+    public void deleteOriData() {
+        Date beforeDay = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
+        mongoTemplate.remove(new Query(Criteria.where("dataTime").lte(beforeDay)), TblOriginOffset.class);
+        LOGGER.info("已删除" + sdf.format(beforeDay) + "之前的原始数据");
+    }
+
+    @Scheduled(cron = "0 0 12 * * ?")
+    public void deleteFilterData() {
+        Date beforeDay = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
+        mongoTemplate.remove(new Query(Criteria.where("dataTime").lte(beforeDay)), TblFilteredOffset.class);
+        LOGGER.info("已删除" + sdf.format(beforeDay) + "之前的过滤数据");
+    }
+
     /**
      * 挠度计算
      *
@@ -305,7 +322,7 @@ public class OffsetService {
      * @param acTime
      * @param bridgeId
      */
-    private void addEightPointOffset(HashMap<String, Double> canIdRadianMap, List<TblMeasurePointOffset> measurePointList, BsonTimestamp acTime, String bridgeId) {
+    private void addEightPointOffset(HashMap<String, Double> canIdRadianMap, List<TblMeasurePointOffset> measurePointList, Date acTime, String bridgeId) {
         List<Double> positionList = new ArrayList<>();
         List<Double> radianList = new ArrayList<>();
         for (TblMeasurePointOffset measurePoint : measurePointList) {
@@ -321,7 +338,7 @@ public class OffsetService {
             storeOffsetList.get(i).setBridgeId(bridgeId);
             storeOffsetList.get(i).setMeasurePoint(String.format("WY-%02d-Q-01", i + 1));
             storeOffsetList.get(i).setAcTime(acTime);
-            storeOffsetList.get(i).setMinZone(sdfm.format(acTime.getValue()));
+            storeOffsetList.get(i).setMinZone(sdfm.format(acTime.getTime()));
             storeOffsetList.get(i).setUploaded("0");
         }
         //保存计算结果
@@ -367,7 +384,7 @@ public class OffsetService {
             String yStr = offset.getData().substring(8);
             offset.setValueX(MyUtils.decimalParse(xStr));
             offset.setValueY(MyUtils.decimalParse(yStr));
-            offset.setDataTime(new BsonTimestamp(sdf.parse(time).getTime()));
+            offset.setDataTime(new Date(sdf.parse(time).getTime()));
             originOffsetList.add(offset);
         }
         return originOffsetList;
